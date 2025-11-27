@@ -54,14 +54,30 @@ const INITIAL_CRITERIA: EvaluationCriteria = {
 };
 
 const App: React.FC = () => {
+  // Safe loader for Records
   const [records, setRecords] = useState<SPRTRecord[]>(() => {
-    const saved = localStorage.getItem('sprt_records');
-    return saved ? JSON.parse(saved) : INITIAL_DATA;
+    try {
+      const saved = localStorage.getItem('sprt_records');
+      if (!saved || saved === 'undefined') return INITIAL_DATA;
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to load records from storage, using default.", e);
+      return INITIAL_DATA;
+    }
   });
 
+  // Safe loader for Criteria
   const [criteria, setCriteria] = useState<EvaluationCriteria>(() => {
-    const saved = localStorage.getItem('sprt_criteria');
-    return saved ? JSON.parse(saved) : INITIAL_CRITERIA;
+    try {
+      const saved = localStorage.getItem('sprt_criteria');
+      if (!saved || saved === 'undefined') return INITIAL_CRITERIA;
+      const parsed = JSON.parse(saved);
+      // Merge with initial to ensure all fields exist (in case of structure updates)
+      return { ...INITIAL_CRITERIA, ...parsed };
+    } catch (e) {
+      console.error("Failed to load criteria from storage, using default.", e);
+      return INITIAL_CRITERIA;
+    }
   });
 
   const [showSettings, setShowSettings] = useState(false);
@@ -89,6 +105,16 @@ const App: React.FC = () => {
       setRecords(prev => prev.filter(r => r.id !== id));
     }
   };
+
+  const handleResetData = () => {
+    if (window.confirm('Hành động này sẽ xóa toàn bộ dữ liệu và đưa về mặc định. Bạn có chắc không?')) {
+        setRecords(INITIAL_DATA);
+        setCriteria(INITIAL_CRITERIA);
+        localStorage.removeItem('sprt_records');
+        localStorage.removeItem('sprt_criteria');
+        window.location.reload();
+    }
+  }
 
   return (
     <div className="min-h-screen pb-12">
@@ -123,19 +149,24 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 mt-8">
         
-        <StatsCards records={records} criteria={criteria} />
+        {/* Error Boundary Alternative: If records is somehow null/undefined */}
+        {records ? (
+            <StatsCards records={records} criteria={criteria} />
+        ) : (
+            <div className="p-4 bg-red-100 text-red-800 rounded">Dữ liệu bị lỗi. Vui lòng Reset.</div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column: Form & Charts */}
           <div className="lg:col-span-1 space-y-6">
             <SPRTForm onAdd={handleAddRecord} />
-            <DriftChart records={records} />
+            <DriftChart records={records || []} />
           </div>
 
           {/* Right Column: Table */}
           <div className="lg:col-span-2">
             <RecordList 
-              records={records} 
+              records={records || []} 
               criteria={criteria}
               onDelete={handleDeleteRecord} 
             />
@@ -144,8 +175,11 @@ const App: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="mt-12 text-center text-slate-400 text-sm pb-8">
+      <footer className="mt-12 text-center text-slate-400 text-sm pb-8 border-t border-slate-200 pt-8">
         <p>&copy; {new Date().getFullYear()} Metrology Dept. ITS-90 Compliant.</p>
+        <button onClick={handleResetData} className="mt-4 text-xs text-slate-300 hover:text-red-400 underline">
+            Reset dữ liệu về mặc định
+        </button>
       </footer>
 
       {/* Settings Modal */}

@@ -11,6 +11,10 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records, criteria }) => {
   const getDeviceId = (r: SPRTRecord) => `${r.manufacturer}-${r.model}-${r.serial}`;
 
   const { uniqueDeviceCount, passCount, failCount, warningCount, avgDrift } = useMemo(() => {
+    if (!records || records.length === 0) {
+        return { uniqueDeviceCount: 0, passCount: 0, failCount: 0, warningCount: 0, avgDrift: 0 };
+    }
+
     const uniqueDevicesMap = new Map<string, SPRTRecord[]>();
 
     // Group records by device
@@ -32,12 +36,20 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records, criteria }) => {
     // Analyze each device based on its LATEST record for status, and Average drift for drift stats
     uniqueDevicesMap.forEach((deviceRecords) => {
       // Sort by year descending (newest first)
-      const sortedRecords = deviceRecords.sort((a, b) => b.calibrationYear - a.calibrationYear);
+      const sortedRecords = deviceRecords.sort((a, b) => Number(b.calibrationYear) - Number(a.calibrationYear));
       const latestRecord = sortedRecords[0];
 
+      if (!latestRecord) return;
+
       // 1. Calculate Status based on Latest Record and Criteria
-      const isPassGa = latestRecord.w_ga >= criteria.w_ga_min;
-      const isPassHg = latestRecord.w_hg <= criteria.w_hg_max;
+      // Safety check for criteria properties
+      const w_ga_min = criteria?.w_ga_min ?? 1.11807;
+      const w_hg_max = criteria?.w_hg_max ?? 0.844235;
+      const drift_fail_mk = criteria?.drift_fail_mk ?? 4.0;
+      const drift_warning_mk = criteria?.drift_warning_mk ?? 2.0;
+
+      const isPassGa = latestRecord.w_ga >= w_ga_min;
+      const isPassHg = latestRecord.w_hg <= w_hg_max;
       
       // Calculate drift for status (latest vs previous)
       let latestDriftMK = 0;
@@ -47,9 +59,9 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records, criteria }) => {
         latestDriftMK = Math.abs(latestRecord.r_tpw_current - latestRecord.r_tpw_previous) * 10000;
       }
 
-      if (!isPassGa || !isPassHg || latestDriftMK > criteria.drift_fail_mk) {
+      if (!isPassGa || !isPassHg || latestDriftMK > drift_fail_mk) {
         fail++;
-      } else if (latestDriftMK > criteria.drift_warning_mk) {
+      } else if (latestDriftMK > drift_warning_mk) {
         warn++;
       } else {
         pass++;

@@ -30,19 +30,26 @@ const RecordList: React.FC<RecordListProps> = ({ records, criteria, onDelete }) 
 
   // Helper to find previous record dynamically
   const findPreviousRecord = (currentRecord: SPRTRecord): SPRTRecord | undefined => {
+    if (!records || !currentRecord) return undefined;
     return records
       .filter(r => 
         r.serial === currentRecord.serial && 
         r.manufacturer === currentRecord.manufacturer && 
-        r.calibrationYear < currentRecord.calibrationYear
+        Number(r.calibrationYear) < Number(currentRecord.calibrationYear)
       )
-      .sort((a, b) => b.calibrationYear - a.calibrationYear)[0]; // Get the closest previous year
+      .sort((a, b) => Number(b.calibrationYear) - Number(a.calibrationYear))[0]; // Get the closest previous year
   };
 
   // Enhanced evaluate function using Dynamic Criteria
   const evaluateRecordSmart = (record: SPRTRecord): ExtendedEvaluationResult => {
-    const isPassGa = record.w_ga >= criteria.w_ga_min;
-    const isPassHg = record.w_hg <= criteria.w_hg_max;
+    // Safety fallback if criteria is not yet loaded or missing
+    const w_ga_min = criteria?.w_ga_min ?? 1.11807;
+    const w_hg_max = criteria?.w_hg_max ?? 0.844235;
+    const drift_fail_mk = criteria?.drift_fail_mk ?? 4.0;
+    const drift_warning_mk = criteria?.drift_warning_mk ?? 2.0;
+
+    const isPassGa = record.w_ga >= w_ga_min;
+    const isPassHg = record.w_hg <= w_hg_max;
     
     // Smart Drift Calculation
     const previousRecord = findPreviousRecord(record);
@@ -71,9 +78,9 @@ const RecordList: React.FC<RecordListProps> = ({ records, criteria, onDelete }) 
     
     if (!isPassGa || !isPassHg) {
       status = 'FAIL';
-    } else if (absDriftMK > criteria.drift_fail_mk) {
+    } else if (absDriftMK > drift_fail_mk) {
       status = 'FAIL';
-    } else if (absDriftMK > criteria.drift_warning_mk) {
+    } else if (absDriftMK > drift_warning_mk) {
       status = 'WARNING';
     }
 
@@ -205,8 +212,8 @@ const RecordList: React.FC<RecordListProps> = ({ records, criteria, onDelete }) 
                       </td>
                       <td className="px-4 py-3">
                         <div className={`font-medium ${
-                          Math.abs(ev.driftMK) > criteria.drift_fail_mk ? 'text-danger' :
-                          Math.abs(ev.driftMK) > criteria.drift_warning_mk ? 'text-warning' : 'text-slate-600'
+                          Math.abs(ev.driftMK) > (criteria?.drift_fail_mk ?? 4) ? 'text-danger' :
+                          Math.abs(ev.driftMK) > (criteria?.drift_warning_mk ?? 2) ? 'text-warning' : 'text-slate-600'
                         }`}>
                            {ev.comparisonYear ? (
                             <>
