@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { SPRTRecord, EvaluationResult, AIAnalysisResponse } from '../types';
+import { SPRTRecord, EvaluationResult, AIAnalysisResponse, EvaluationCriteria } from '../types';
 import { analyzeSPRTData } from '../services/geminiService';
 
 interface RecordListProps {
   records: SPRTRecord[];
+  criteria: EvaluationCriteria;
   onDelete: (id: string) => void;
 }
 
@@ -13,7 +14,7 @@ interface ExtendedEvaluationResult extends EvaluationResult {
   isAutoCalculated: boolean;
 }
 
-const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
+const RecordList: React.FC<RecordListProps> = ({ records, criteria, onDelete }) => {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
@@ -38,10 +39,10 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
       .sort((a, b) => b.calibrationYear - a.calibrationYear)[0]; // Get the closest previous year
   };
 
-  // Enhanced evaluate function
+  // Enhanced evaluate function using Dynamic Criteria
   const evaluateRecordSmart = (record: SPRTRecord): ExtendedEvaluationResult => {
-    const isPassGa = record.w_ga >= 1.11807;
-    const isPassHg = record.w_hg <= 0.844235;
+    const isPassGa = record.w_ga >= criteria.w_ga_min;
+    const isPassHg = record.w_hg <= criteria.w_hg_max;
     
     // Smart Drift Calculation
     const previousRecord = findPreviousRecord(record);
@@ -63,11 +64,18 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
 
     // Approx conversion: 0.1 Ohm/K for 25 Ohm SPRT. So Drift(K) = Drift(Ohm) * 10. Drift(mK) = Drift(Ohm) * 10000.
     const driftMK = driftOhm * 10000;
+    const absDriftMK = Math.abs(driftMK);
 
     // Status logic
     let status: 'PASS' | 'FAIL' | 'WARNING' = 'PASS';
-    if (!isPassGa || !isPassHg) status = 'FAIL';
-    else if (Math.abs(driftMK) > 2) status = 'WARNING'; 
+    
+    if (!isPassGa || !isPassHg) {
+      status = 'FAIL';
+    } else if (absDriftMK > criteria.drift_fail_mk) {
+      status = 'FAIL';
+    } else if (absDriftMK > criteria.drift_warning_mk) {
+      status = 'WARNING';
+    }
 
     return { isPassGa, isPassHg, driftOhm, driftMK, status, comparisonYear, isAutoCalculated };
   };
@@ -81,7 +89,7 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
       const matchesStatus = statusFilter === 'ALL' || ev.status === statusFilter;
       return matchesYear && matchesManufacturer && matchesStatus;
     });
-  }, [records, yearFilter, manufacturerFilter, statusFilter]);
+  }, [records, yearFilter, manufacturerFilter, statusFilter, criteria]); // Re-run when criteria changes
 
   const handleAnalyze = async (record: SPRTRecord) => {
     setSelectedRecordId(record.id);
@@ -196,7 +204,10 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
                         {record.r_tpw_current.toFixed(6)}
                       </td>
                       <td className="px-4 py-3">
-                        <div className={`font-medium ${Math.abs(ev.driftMK) > 2 ? 'text-warning' : 'text-slate-600'}`}>
+                        <div className={`font-medium ${
+                          Math.abs(ev.driftMK) > criteria.drift_fail_mk ? 'text-danger' :
+                          Math.abs(ev.driftMK) > criteria.drift_warning_mk ? 'text-warning' : 'text-slate-600'
+                        }`}>
                            {ev.comparisonYear ? (
                             <>
                               {ev.driftMK > 0 ? '+' : ''}{ev.driftMK.toFixed(2)}

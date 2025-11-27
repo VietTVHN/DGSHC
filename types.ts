@@ -24,3 +24,10 @@ export interface AIAnalysisResponse {
   recommendation: string;
   technicalDetails: string;
 }
+
+export interface EvaluationCriteria {
+  w_ga_min: number;
+  w_hg_max: number;
+  drift_warning_mk: number; // Threshold for Warning (mK)
+  drift_fail_mk: number;    // Threshold for Fail (mK)
+}
