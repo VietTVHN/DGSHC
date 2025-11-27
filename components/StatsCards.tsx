@@ -10,11 +10,33 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records }) => {
   const passCount = records.filter(r => r.w_ga >= 1.11807 && r.w_hg <= 0.844235).length;
   const failCount = total - passCount;
   
-  // Calculate average drift (absolute) for records with previous data
-  const driftRecords = records.filter(r => r.r_tpw_previous > 0);
-  const avgDrift = driftRecords.length > 0
-    ? (driftRecords.reduce((acc, r) => acc + Math.abs(r.r_tpw_current - r.r_tpw_previous), 0) / driftRecords.length) * 10000 // approx mK
-    : 0;
+  // Calculate smart drift (compare current record with its nearest previous record)
+  let totalDrift = 0;
+  let driftCount = 0;
+
+  records.forEach(record => {
+    // Find the nearest previous record for this specific device (Serial + Manufacturer)
+    const previousRecord = records
+      .filter(r => 
+        r.serial === record.serial && 
+        r.manufacturer === record.manufacturer && 
+        r.calibrationYear < record.calibrationYear
+      )
+      .sort((a, b) => b.calibrationYear - a.calibrationYear)[0];
+
+    if (previousRecord) {
+      const drift = Math.abs(record.r_tpw_current - previousRecord.r_tpw_current) * 10000; // mK
+      totalDrift += drift;
+      driftCount++;
+    } else if (record.r_tpw_previous > 0) {
+      // Fallback to manual previous if exists
+      const drift = Math.abs(record.r_tpw_current - record.r_tpw_previous) * 10000;
+      totalDrift += drift;
+      driftCount++;
+    }
+  });
+
+  const avgDrift = driftCount > 0 ? totalDrift / driftCount : 0;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -39,7 +61,7 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records }) => {
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div className="text-slate-500 text-sm font-medium">Độ trôi TB (mK)</div>
         <div className="text-2xl font-bold text-accent">{avgDrift.toFixed(2)}</div>
-        <div className="text-xs text-slate-400 mt-1">Ước tính (k=1)</div>
+        <div className="text-xs text-slate-400 mt-1">Giữa các kỳ hiệu chuẩn</div>
       </div>
     </div>
   );

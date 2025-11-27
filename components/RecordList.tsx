@@ -7,23 +7,11 @@ interface RecordListProps {
   onDelete: (id: string) => void;
 }
 
-// Helper to evaluate ITS-90 compliance locally
-const evaluateRecord = (record: SPRTRecord): EvaluationResult => {
-  const isPassGa = record.w_ga >= 1.11807;
-  const isPassHg = record.w_hg <= 0.844235;
-  
-  // Drift Calculation
-  const driftOhm = record.r_tpw_previous > 0 ? record.r_tpw_current - record.r_tpw_previous : 0;
-  // Approx conversion: 0.1 Ohm/K for 25 Ohm SPRT. So Drift(K) = Drift(Ohm) * 10. Drift(mK) = Drift(Ohm) * 10000.
-  const driftMK = driftOhm * 10000;
-
-  // Simple status logic
-  let status: 'PASS' | 'FAIL' | 'WARNING' = 'PASS';
-  if (!isPassGa || !isPassHg) status = 'FAIL';
-  else if (Math.abs(driftMK) > 2) status = 'WARNING'; // Warning if drift > 2mK (arbitrary strict threshold)
-
-  return { isPassGa, isPassHg, driftOhm, driftMK, status };
-};
+// Extended evaluation interface to include comparison context
+interface ExtendedEvaluationResult extends EvaluationResult {
+  comparisonYear?: number | string;
+  isAutoCalculated: boolean;
+}
 
 const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
@@ -39,10 +27,55 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
   const years = useMemo(() => Array.from(new Set(records.map(r => r.calibrationYear))).sort((a, b) => Number(b) - Number(a)), [records]);
   const manufacturers = useMemo(() => Array.from(new Set(records.map(r => r.manufacturer))).sort(), [records]);
 
+  // Helper to find previous record dynamically
+  const findPreviousRecord = (currentRecord: SPRTRecord): SPRTRecord | undefined => {
+    return records
+      .filter(r => 
+        r.serial === currentRecord.serial && 
+        r.manufacturer === currentRecord.manufacturer && 
+        r.calibrationYear < currentRecord.calibrationYear
+      )
+      .sort((a, b) => b.calibrationYear - a.calibrationYear)[0]; // Get the closest previous year
+  };
+
+  // Enhanced evaluate function
+  const evaluateRecordSmart = (record: SPRTRecord): ExtendedEvaluationResult => {
+    const isPassGa = record.w_ga >= 1.11807;
+    const isPassHg = record.w_hg <= 0.844235;
+    
+    // Smart Drift Calculation
+    const previousRecord = findPreviousRecord(record);
+    
+    let driftOhm = 0;
+    let comparisonYear: number | string | undefined = undefined;
+    let isAutoCalculated = false;
+
+    if (previousRecord) {
+      driftOhm = record.r_tpw_current - previousRecord.r_tpw_current;
+      comparisonYear = previousRecord.calibrationYear;
+      isAutoCalculated = true;
+    } else if (record.r_tpw_previous > 0) {
+      // Fallback to manual entry if no history found
+      driftOhm = record.r_tpw_current - record.r_tpw_previous;
+      comparisonYear = 'Manual';
+      isAutoCalculated = false;
+    }
+
+    // Approx conversion: 0.1 Ohm/K for 25 Ohm SPRT. So Drift(K) = Drift(Ohm) * 10. Drift(mK) = Drift(Ohm) * 10000.
+    const driftMK = driftOhm * 10000;
+
+    // Status logic
+    let status: 'PASS' | 'FAIL' | 'WARNING' = 'PASS';
+    if (!isPassGa || !isPassHg) status = 'FAIL';
+    else if (Math.abs(driftMK) > 2) status = 'WARNING'; 
+
+    return { isPassGa, isPassHg, driftOhm, driftMK, status, comparisonYear, isAutoCalculated };
+  };
+
   // Filter logic
   const filteredRecords = useMemo(() => {
     return records.filter(record => {
-      const ev = evaluateRecord(record);
+      const ev = evaluateRecordSmart(record);
       const matchesYear = yearFilter === 'ALL' || record.calibrationYear.toString() === yearFilter;
       const matchesManufacturer = manufacturerFilter === 'ALL' || record.manufacturer === manufacturerFilter;
       const matchesStatus = statusFilter === 'ALL' || ev.status === statusFilter;
@@ -55,7 +88,7 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
     setLoadingAI(true);
     setAiAnalysis(null);
     
-    const evaluation = evaluateRecord(record);
+    const evaluation = evaluateRecordSmart(record);
     const result = await analyzeSPRTData(record, evaluation);
     
     setAiAnalysis(result);
@@ -150,7 +183,7 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
               </tr>
             ) : (
               filteredRecords.map((record) => {
-                const ev = evaluateRecord(record);
+                const ev = evaluateRecordSmart(record);
                 return (
                   <React.Fragment key={record.id}>
                     <tr className="hover:bg-slate-50 transition-colors">
@@ -162,8 +195,22 @@ const RecordList: React.FC<RecordListProps> = ({ records, onDelete }) => {
                       <td className="px-4 py-3 font-mono text-slate-700">
                         {record.r_tpw_current.toFixed(6)}
                       </td>
-                      <td className={`px-4 py-3 font-medium ${Math.abs(ev.driftMK) > 2 ? 'text-warning' : 'text-slate-600'}`}>
-                        {record.r_tpw_previous > 0 ? `${ev.driftMK > 0 ? '+' : ''}${ev.driftMK.toFixed(2)}` : '--'}
+                      <td className="px-4 py-3">
+                        <div className={`font-medium ${Math.abs(ev.driftMK) > 2 ? 'text-warning' : 'text-slate-600'}`}>
+                           {ev.comparisonYear ? (
+                            <>
+                              {ev.driftMK > 0 ? '+' : ''}{ev.driftMK.toFixed(2)}
+                            </>
+                          ) : (
+                            <span className="text-slate-300">--</span>
+                          )}
+                        </div>
+                        {ev.comparisonYear && (
+                          <div className="text-[10px] text-slate-400">
+                            vs {ev.comparisonYear}
+                            {ev.isAutoCalculated && <i className="fa-solid fa-bolt ml-1 text-yellow-400" title="Tự động tính từ lịch sử"></i>}
+                          </div>
+                        )}
                       </td>
                       <td className={`px-4 py-3 text-center font-mono ${ev.isPassGa ? 'text-success' : 'text-danger font-bold'}`}>
                         {record.w_ga.toFixed(7)}
