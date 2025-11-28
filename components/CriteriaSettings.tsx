@@ -51,7 +51,7 @@ const CriteriaSettings: React.FC<CriteriaSettingsProps> = ({ currentCriteria, on
               </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">W(Ga) Tối thiểu (>=)</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">W(Ga) Tối thiểu (&ge;)</label>
                   <input
                     type="number" step="0.0000001" name="w_ga_min"
                     value={formData.w_ga_min} onChange={handleChange}
@@ -59,7 +59,7 @@ const CriteriaSettings: React.FC<CriteriaSettingsProps> = ({ currentCriteria, on
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">W(Hg) Tối đa (<=)</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">W(Hg) Tối đa (&le)</label>
                   <input
                     type="number" step="0.0000001" name="w_hg_max"
                     value={formData.w_hg_max} onChange={handleChange}
