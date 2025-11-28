@@ -73,7 +73,6 @@ const SPRTForm: React.FC<SPRTFormProps> = ({ onAdd }) => {
       w_hg: ''
     });
   };
-  };
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6">
