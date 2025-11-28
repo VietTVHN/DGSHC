@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SPRTRecord } from '../types';
-
+// Dán link Make.com của bạn vào đây
+const WEBHOOK_URL = "https://hook.eu2.make.com/v4mdikjifgpnvhzfb2nxu4uxrccervnj";
 interface SPRTFormProps {
   onAdd: (record: Omit<SPRTRecord, 'id' | 'timestamp'>) => void;
 }
@@ -22,9 +23,12 @@ const SPRTForm: React.FC<SPRTFormProps> = ({ onAdd }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Thêm từ khóa 'async' vào đầu hàm để xử lý gửi mạng
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd({
+
+    // 1. Tạo gói dữ liệu chuẩn (để dùng chung cho cả App và gửi đi Make)
+    const payload = {
       model: formData.model,
       serial: formData.serial,
       manufacturer: formData.manufacturer,
@@ -32,9 +36,32 @@ const SPRTForm: React.FC<SPRTFormProps> = ({ onAdd }) => {
       r_tpw_current: Number(formData.r_tpw_current),
       r_tpw_previous: formData.r_tpw_previous ? Number(formData.r_tpw_previous) : 0,
       w_ga: Number(formData.w_ga),
-      w_hg: Number(formData.w_hg)
-    });
-    // Reset form mostly, keep manufacturer/model maybe? No, clear all for now.
+      w_hg: Number(formData.w_hg),
+      // Thêm ngày tạo để bên Google Sheet biết thời gian gửi
+      created_at: new Date().toISOString()
+    };
+
+    // 2. Cập nhật giao diện App ngay lập tức (như cũ)
+    onAdd(payload);
+
+    // 3. Gửi dữ liệu sang Make.com (Code mới thêm)
+    try {
+      // Hiển thị thông báo nhỏ hoặc log
+      console.log("Đang gửi dữ liệu sang Make...");
+      
+      await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      alert("✅ Đã lưu dữ liệu thành công!");
+    } catch (error) {
+      console.error("Lỗi gửi dữ liệu:", error);
+      alert("⚠️ Dữ liệu đã lưu trên App nhưng lỗi gửi sang Sheet (Kiểm tra mạng)");
+    }
+
+    // 4. Xóa trắng form để nhập cái tiếp theo (như cũ)
     setFormData({
       model: '',
       serial: '',
@@ -45,6 +72,7 @@ const SPRTForm: React.FC<SPRTFormProps> = ({ onAdd }) => {
       w_ga: '',
       w_hg: ''
     });
+  };
   };
 
   return (
