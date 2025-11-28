@@ -50,16 +50,32 @@ const INITIAL_CRITERIA: EvaluationCriteria = {
   w_ga_min: 1.11807,
   w_hg_max: 0.844235,
   drift_warning_mk: 2.0,
-  drift_fail_mk: 4.0 // Standard fallback
+  drift_fail_mk: 4.0
 };
 
 const App: React.FC = () => {
-  // Safe loader for Records
+  // Safe loader for Records with Data Sanitization
   const [records, setRecords] = useState<SPRTRecord[]>(() => {
     try {
       const saved = localStorage.getItem('sprt_records');
       if (!saved || saved === 'undefined') return INITIAL_DATA;
-      return JSON.parse(saved);
+      
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return INITIAL_DATA;
+
+      // Sanitize data: Ensure all required fields exist and are correct types
+      return parsed.map((r: any) => ({
+        id: r.id || crypto.randomUUID(),
+        model: r.model || 'Unknown',
+        serial: r.serial || 'Unknown',
+        manufacturer: r.manufacturer || 'Unknown',
+        calibrationYear: Number(r.calibrationYear) || new Date().getFullYear(),
+        r_tpw_current: Number(r.r_tpw_current) || 0,
+        r_tpw_previous: Number(r.r_tpw_previous) || 0,
+        w_ga: Number(r.w_ga) || 0,
+        w_hg: Number(r.w_hg) || 0,
+        timestamp: Number(r.timestamp) || Date.now()
+      }));
     } catch (e) {
       console.error("Failed to load records from storage, using default.", e);
       return INITIAL_DATA;
@@ -72,7 +88,9 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('sprt_criteria');
       if (!saved || saved === 'undefined') return INITIAL_CRITERIA;
       const parsed = JSON.parse(saved);
-      // Merge with initial to ensure all fields exist (in case of structure updates)
+      if (typeof parsed !== 'object') return INITIAL_CRITERIA;
+      
+      // Merge with initial to ensure all fields exist
       return { ...INITIAL_CRITERIA, ...parsed };
     } catch (e) {
       console.error("Failed to load criteria from storage, using default.", e);
@@ -96,7 +114,6 @@ const App: React.FC = () => {
       id: crypto.randomUUID(),
       timestamp: Date.now()
     };
-    // Add to top
     setRecords(prev => [record, ...prev]);
   };
 
@@ -149,8 +166,7 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 mt-8">
         
-        {/* Error Boundary Alternative: If records is somehow null/undefined */}
-        {records ? (
+        {records && Array.isArray(records) ? (
             <StatsCards records={records} criteria={criteria} />
         ) : (
             <div className="p-4 bg-red-100 text-red-800 rounded">Dữ liệu bị lỗi. Vui lòng Reset.</div>

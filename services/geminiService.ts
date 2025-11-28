@@ -1,7 +1,19 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { SPRTRecord, EvaluationResult, AIAnalysisResponse } from "../types";
 
-const apiKey = process.env.API_KEY || "";
+// Safely retrieve API key, checking if process is defined to prevent crash in non-Node environments
+const getApiKey = () => {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.API_KEY || "";
+    }
+  } catch (e) {
+    // Ignore error
+  }
+  return "";
+};
+
+const apiKey = getApiKey();
 const ai = new GoogleGenAI({ apiKey });
 
 export const analyzeSPRTData = async (
@@ -9,6 +21,10 @@ export const analyzeSPRTData = async (
   evaluation: EvaluationResult
 ): Promise<AIAnalysisResponse> => {
   try {
+    if (!apiKey) {
+      throw new Error("API Key chưa được cấu hình.");
+    }
+
     const prompt = `
       Bạn là một chuyên gia về Đo lường Nhiệt (Metrology), chuyên về hiệu chuẩn nhiệt kế điện trở bạch kim chuẩn (SPRT) theo thang đo ITS-90.
       
@@ -59,8 +75,8 @@ export const analyzeSPRTData = async (
     console.error("Gemini Analysis Error:", error);
     return {
       summary: "Không thể phân tích dữ liệu lúc này.",
-      technicalDetails: "Lỗi kết nối hoặc xử lý dữ liệu AI.",
-      recommendation: "Vui lòng kiểm tra lại các chỉ số thủ công."
+      technicalDetails: `Lỗi: ${(error as Error).message || "Không xác định"}`,
+      recommendation: "Vui lòng kiểm tra lại cấu hình hoặc đánh giá thủ công."
     };
   }
 };
